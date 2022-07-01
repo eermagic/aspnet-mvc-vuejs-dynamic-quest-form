@@ -1,0 +1,118 @@
+﻿<h1>動態問卷表單開發教學</h1>
+<div id="app">
+    <div class="form-group" v-for="title in QuestForm">
+        <div>{{title.QuestNo}} {{title.QuestTitle}}</div>
+
+        <!--顯示文字方塊-->
+        <div v-if="title.QuestOptionType === 'Textbox'">
+            <input type="text" class="form-control" v-bind:id="'Quest_' + title.QuestNo" />
+        </div>
+
+        <!--顯示單選題-->
+        <div v-if="title.QuestOptionType === 'Radio'">
+            <label class="radio-inline" v-for="opt in title.QuestOptions">
+                <input type="radio" v-bind:name="'Quest_' + title.QuestNo" v-bind:id="'Quest_' + title.QuestNo + '_' + opt.QuestOtpionId" v-bind:value="opt.QuestOtpionId" />{{opt.QuestOptionText}}
+                <input type="text" v-bind:id="'Quest_' + title.QuestNo + '_' + opt.QuestOtpionId + '_Text'" v-if="opt.QuestOptionWithTextbox === 'True'" />
+            </label>
+        </div>
+
+        <!--顯示複選題-->
+        <div v-if="title.QuestOptionType === 'Checkbox'">
+            <label class="checkbox-inline" v-for="opt in title.QuestOptions">
+                <input type="checkbox" v-bind:name="'Quest_' + title.QuestNo" v-bind:id="'Quest_' + title.QuestNo + '_' + opt.QuestOtpionId" v-bind:value="opt.QuestOtpionId" />{{opt.QuestOptionText}}
+                <input type="text" v-bind:id="'Quest_' + title.QuestNo + '_' + opt.QuestOtpionId + '_Text'" v-if="opt.QuestOptionWithTextbox === 'True'" />
+            </label>
+        </div>
+    </div>
+    <button type="button" class="btn btn-primary" v-on:click="SendQuest()">送出</button>
+</div>
+
+@section scripts{
+    <script>
+        const app = {
+            data() {
+                return {
+                    // 問卷表單
+                    QuestForm: []
+                    // 使用者答案
+                    , QuestUserAnswer: []
+                }
+            },
+            mounted() {
+                // 將 Controller 的 Json 轉為物件
+                this.QuestForm = JSON.parse('@Html.Raw(ViewData["QuestForm"])');
+            },
+            methods: {
+                // 送出表單
+                SendQuest() {
+                    // 清空使用者答案
+                    this.QuestUserAnswer = [];
+
+                    for (i = 0; i < this.QuestForm.length; i++) {
+                        let userAnswer = '';
+                        // 文字方塊
+                        if (this.QuestForm[i].QuestOptionType == 'Textbox') {
+                            userAnswer = $('#Quest_' + this.QuestForm[i].QuestNo).val();
+                        }
+
+                        // 單選題 & 複選題
+                        if (this.QuestForm[i].QuestOptionType == 'Radio' || this.QuestForm[i].QuestOptionType == 'Checkbox') {
+                            for (j = 0; j < this.QuestForm[i].QuestOptions.length; j++) {
+                                let optionId = '#Quest_' + this.QuestForm[i].QuestNo + '_' + this.QuestForm[i].QuestOptions[j].QuestOtpionId;
+                                if ($(optionId).is(":checked") == true) {
+                                    // 有勾選
+                                    if (userAnswer != '') {
+                                        userAnswer += '|';
+                                    }
+                                    userAnswer += $(optionId).val();
+
+                                    // 附加文字
+                                    if ($(optionId).is(":checked") == true && this.QuestForm[i].QuestOptions[j].QuestOptionWithTextbox == 'True') {
+                                        if ($(optionId + '_Text').val() == '') {
+                                            alert("第 " + this.QuestForm[i].QuestNo + " 題附加文字尚未回答");
+                                            return;
+                                        }
+                                        userAnswer += ":" + $(optionId + '_Text').val().replace(':', '：').replace('|', '｜');
+                                    }
+                                }
+                            }
+                        }
+
+                        // 檢查是否回答
+                        if (userAnswer == '') {
+                            alert("第 " + this.QuestForm[i].QuestNo + " 題尚未回答");
+                            return;
+                        }
+
+                        // 記錄使用者答案
+                        let answerObj = { 'QuestNo': this.QuestForm[i].QuestNo, 'UserAnswer': userAnswer };
+                        this.QuestUserAnswer.push(answerObj);
+                    }
+
+                    // 組合表單資料
+                    var postData = {};
+                    postData['QuestUserAnswer'] = this.QuestUserAnswer;
+
+                    // 傳送資料至 Controller
+                    $.ajax({
+                        url:'@Url.Action("SaveUserAnswer", "Home")',
+                        method:'POST',
+                        dataType:'json',
+                        data: { inModel: postData, __RequestVerificationToken: $('@Html.AntiForgeryToken()').val() },
+                        success: function (datas) {
+                            if (datas.ErrMsg) {
+                                alert(datas.ErrMsg);
+                                return;
+                            }
+                            alert(datas.ResultMsg);
+                        },
+                        error: function (err) {
+                            alert(err.responseText);
+                        }
+                    });
+                }
+            }
+        }
+        Vue.createApp(app).mount('#app');
+    </script>
+}
